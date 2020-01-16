@@ -1,21 +1,24 @@
 use ggez::*;
 use ggez::input::mouse::MouseButton;
 use ggez::input::keyboard::KeyCode;
+use std::collections::VecDeque;
 
-#[derive(Copy,Clone)]
+#[derive(Clone)]
 struct Ball {
     x: f32,
     y: f32,
     xv: f32,
     yv: f32,
     stationary: bool,
+    mass: f32,
+    trail: VecDeque<(f32,f32)>,
 }
 
 impl Ball {
     fn new(x: f32, y: f32) -> Ball {
-        Ball{ x: x, y: y, xv: 0.0, yv: 0.0, stationary: false}
+        Ball{ x: x, y: y, xv: 0.0, yv: 0.0, stationary: false, mass: 10.0, trail: VecDeque::with_capacity(500)}
     }
-    fn distance_from(&self, other: Ball) -> f32 {
+    fn distance_from(&self, other: &Ball) -> f32 {
         (self.x - other.x).hypot(self.y - other.y)
     }
 }
@@ -25,11 +28,12 @@ struct Game {
     stationary: bool,
     xv: f32,
     yv: f32,
+    mass: f32,
 }
 
 impl Game {
     fn new(_ctx: &mut Context) -> Game {
-        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0 }
+        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0 }
     }
 }
 
@@ -42,11 +46,14 @@ impl ggez::event::EventHandler for Game {
                     if i == j {continue;}
                     
                     // TODO: Set some gravity
+                    // TODO: Incorporate Mass
                     // θ = tan-1 ( y / x )
                     // x = r × cos( θ )
                     // y = r × sin( θ )
+                    // G: In SI units its value is approximately 6.674×10−11 m3⋅kg−1⋅s−2
+                    // F = G * ( (m1 * m2) / r^2)
 
-                    let distance_mod = (1.0 / (self.circle_vec[i].distance_from(self.circle_vec[j]))).min(2.0).max(0.0);
+                    let distance_mod = 0.006674 * ((self.circle_vec[j].mass * self.circle_vec[i].mass) / self.circle_vec[i].distance_from(&self.circle_vec[j])) / self.circle_vec[i].mass;
                     let angle = (self.circle_vec[j].y - self.circle_vec[i].y).atan2(self.circle_vec[j].x - self.circle_vec[i].x);
 
                     self.circle_vec[i].xv += distance_mod * angle.cos();
@@ -54,6 +61,10 @@ impl ggez::event::EventHandler for Game {
                 }
             }
             for circle in self.circle_vec.iter_mut() {
+                if circle.trail.len() == circle.trail.capacity() {
+                    let _ = circle.trail.pop_back();
+                }
+                circle.trail.push_front((circle.x,circle.y));
                 circle.x += circle.xv;
                 circle.y += circle.yv;
             }
@@ -72,15 +83,33 @@ impl ggez::event::EventHandler for Game {
         if self.stationary {
             graphics::queue_text(ctx, &graphics::Text::new("Placing Static Node"),mint::Point2{x:0.0,y:32.0},Some(graphics::DrawParam::default().color));
         }
+        if self.mass != 0.0 {
+            graphics::queue_text(ctx, &graphics::Text::new(format!("Mass: {}", self.mass)),mint::Point2{x:0.0,y:48.0},Some(graphics::DrawParam::default().color));
+        }
         graphics::draw_queued_text(ctx, graphics::DrawParam::default(), None, graphics::FilterMode::Linear)?;
         for circle in self.circle_vec.iter() {
+            let capacity = circle.trail.capacity() as f32;
+            let mass = circle.mass.log10();
+            let color = graphics::Color::new(((circle.xv.abs().hypot(circle.yv.abs())) / 10.0).min(1.0), 0.2, 0.2, 1.0);
+            for (id, trail) in circle.trail.iter().enumerate() {
+                let trail_modifier = 0.9 - ((id + 1) as f32 / capacity) as f32;
+                let trail_blit = graphics::Mesh::new_circle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    mint::Point2{x:trail.0, y:trail.1},
+                    10.0 * mass * trail_modifier,
+                    0.1,
+                    color,
+                )?;
+                graphics::draw(ctx, &trail_blit, graphics::DrawParam::default())?;
+            }
             let circle_blit = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),
                 mint::Point2{x:circle.x, y:circle.y},
-                10.0,
+                10.0 * mass,
                 0.1,
-                graphics::Color::new(((circle.xv.abs().hypot(circle.yv.abs())) / 10.0).min(1.0), 0.2, 0.2, 1.0),
+                color,
             )?;
             graphics::draw(ctx, &circle_blit, graphics::DrawParam::default())?;
         }
@@ -95,6 +124,7 @@ impl ggez::event::EventHandler for Game {
             ball.stationary = self.stationary;
             ball.xv = self.xv;
             ball.yv = self.yv;
+            ball.mass = self.mass;
             self.circle_vec.push(ball);
         }
     }
@@ -114,6 +144,9 @@ impl ggez::event::EventHandler for Game {
             KeyCode::Right => {self.xv += 0.1;}
             KeyCode::Left => {self.xv -= 0.1;}
             KeyCode::Back => {self.circle_vec.clear();}
+            KeyCode::RShift => {self.mass += 10.0;}
+            KeyCode::LShift => {self.mass -= 10.0;}
+            KeyCode::Return => {self.mass = 10.0; self.yv = 0.0; self.xv = 0.0;}
             _ => ()
         }
     }
