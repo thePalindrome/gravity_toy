@@ -34,11 +34,12 @@ struct Game {
     show_help: bool,
     draw_trails: bool,
     running: bool,
+    zoom_level: f32,
 }
 
 impl Game {
     fn new(_ctx: &mut Context) -> Game {
-        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0, show_help: false, draw_trails: false, running: true }
+        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0, show_help: false, draw_trails: false, running: true, zoom_level: 1.0 }
     }
 }
 
@@ -122,8 +123,8 @@ impl ggez::event::EventHandler for Game {
                     let trail_blit = graphics::Mesh::new_circle(
                         ctx,
                         graphics::DrawMode::fill(),
-                        mint::Point2{x:trail.0, y:trail.1},
-                        10.0 * mass * trail_modifier,
+                        mint::Point2{x:trail.0 * self.zoom_level, y:trail.1 * self.zoom_level},
+                        10.0 * mass * trail_modifier * self.zoom_level,
                         0.1,
                         color,
                     )?;
@@ -133,8 +134,8 @@ impl ggez::event::EventHandler for Game {
             let circle_blit = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),
-                mint::Point2{x:circle.x, y:circle.y},
-                10.0 * mass,
+                mint::Point2{x:circle.x * self.zoom_level, y:circle.y * self.zoom_level},
+                10.0 * mass * self.zoom_level,
                 0.1,
                 color,
             )?;
@@ -143,6 +144,11 @@ impl ggez::event::EventHandler for Game {
         graphics::present(ctx)?;
         timer::yield_now();
         Ok(())
+    }
+
+    fn mouse_wheel_event(&mut self, _ctx: &mut Context, _x: f32, y: f32)
+    {
+        self.zoom_level += y / 10.0;
     }
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) {
