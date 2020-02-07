@@ -179,7 +179,7 @@ impl ggez::event::EventHandler for Game {
             KeyCode::Tab => {self.running = !self.running;}
             KeyCode::S => {save_to_file(&self.circle_vec)}
             KeyCode::L => {match load_from_file() {
-                    Ok(sim) => {self.circle_vec = sim;self.running = false;}
+                    Ok(sim) => {self.circle_vec = sim;self.running = false; for i in 0..self.circle_vec.len() {self.circle_vec[i].trail = VecDeque::with_capacity(50)}}
                     Err(e) => {eprintln!("Failure to load: {}", e)}
                 }}
             _ => ()
