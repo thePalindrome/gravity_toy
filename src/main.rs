@@ -2,8 +2,9 @@ use ggez::*;
 use ggez::input::mouse::MouseButton;
 use ggez::input::keyboard::KeyCode;
 use std::collections::VecDeque;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Ball {
     x: f32,
     y: f32,
@@ -11,6 +12,7 @@ struct Ball {
     yv: f32,
     stationary: bool,
     mass: f32,
+    #[serde(skip)]
     trail: VecDeque<(f32,f32)>,
 }
 
@@ -84,7 +86,11 @@ impl ggez::event::EventHandler for Game {
 
         draw_text(ctx, "Press F1 for help".to_string(), 128.0, 0.0);
         if self.show_help {
-            draw_text(ctx,"Left click to place node\nLeft Arrow/Right Arrow to modify X velocity\nUp Arrow/Down Arrow to modify Y velocity\nLeft Shift/Right Shift to modify mass of node\nEnter/Return to reset velocity and mass to default values\nTab to pause simulation\nSpace to toggle \"Static\" mode\nBackspace to clear all nodes\nF2 to toggle trails (performance heavy)\nEscape to exit".to_string(), 128.0, 16.0);
+            draw_text(ctx,"Left click to place node\nLeft Arrow/Right Arrow to modify X velocity\
+            \nUp Arrow/Down Arrow to modify Y velocity\nLeft Shift/Right Shift to modify mass of node\n\
+            Enter/Return to reset velocity and mass to default values\nTab to pause simulation\nSpace to toggle \"Static\" mode\n\
+            Backspace to clear all nodes\nF2 to toggle trails (performance heavy)\nEscape to exit\n\
+            L to load a json file\nS to save the current state to a json file".to_string(), 128.0, 16.0);
         }
 
         if self.xv != 0.0 {
@@ -171,6 +177,11 @@ impl ggez::event::EventHandler for Game {
             KeyCode::F1 => {self.show_help = !self.show_help;}
             KeyCode::F2 => {self.draw_trails = !self.draw_trails;}
             KeyCode::Tab => {self.running = !self.running;}
+            KeyCode::S => {save_to_file(&self.circle_vec)}
+            KeyCode::L => {match load_from_file() {
+                    Ok(sim) => {self.circle_vec = sim;self.running = false;}
+                    Err(e) => {eprintln!("Failure to load: {}", e)}
+                }}
             _ => ()
         }
     }
@@ -180,7 +191,40 @@ fn draw_text(ctx: &mut Context, str: String, x: f32, y: f32) {
     graphics::queue_text(ctx, &graphics::Text::new(str),mint::Point2{x:x,y:y},Some(graphics::DrawParam::default().color));
 }
 
+fn save_to_file(circle_vec: &Vec<Ball>) {
+    match nfd::open_save_dialog(None, None) {
+        Ok(r)   => {
+            match r {
+                nfd::Response::Okay(file_path) => {
+                    match std::fs::write(file_path, serde_json::to_string(circle_vec).unwrap()) {
+                        Ok(_) => (),
+                        Err(e) => {eprintln!("Error while writing: {}", e);}
+                    }}
+                _   =>  () // If they hit cancel, I don't care, and they shouldn't be able to select multiple files
+            }
+        }
+        Err(e) => {eprintln!("Error occured while selecting save location: {}",e)}
+    }
+}
+
+fn load_from_file() -> Result<Vec<Ball>, Box<dyn std::error::Error>> {
+    let dialog = nfd::open_file_dialog(None, None)?;
+    match dialog {
+        nfd::Response::Okay(file_path) => load_from_json(&file_path),
+        nfd::Response::Cancel   =>  load_from_json(&"".to_string()), // loads from blank file to create an error :shrug:
+        nfd::Response::OkayMultiple(_x) =>  panic!("I'm pretty sure this can't happen"),
+    }
+}
+
+fn load_from_json(str: &String) -> Result<Vec<Ball>, Box<dyn std::error::Error>> {
+    let file_contents = std::fs::read_to_string(str)?;
+    let simulation: Vec<Ball> = serde_json::from_str(&file_contents)?;
+    Ok(simulation)
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
     let c = conf::Conf::new();
     let (mut ctx, mut event_loop) = ContextBuilder::new("hello_ggez", "thePalindrome")
         .conf(c)
@@ -188,5 +232,13 @@ fn main() {
         .unwrap();
     
     let mut state = Game::new(&mut ctx);
+
+    if args.len() > 1 {
+        match load_from_json(args.get(1).unwrap()) {
+            Ok(simulation) => {state.circle_vec = simulation;},
+            Err(e) =>   {eprintln!("Error occured while loading sim: {}", e);}
+        }
+    }
+
     event::run(&mut ctx, &mut event_loop, &mut state).unwrap();
 }
