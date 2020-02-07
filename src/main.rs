@@ -112,6 +112,7 @@ impl ggez::event::EventHandler for Game {
             if self.draw_trails {
                 for (id, trail) in circle.trail.iter().enumerate() {
                     let trail_modifier = 0.9 - ((id + 1) as f32 / capacity) as f32;
+                    if trail_modifier < 0.0 { continue; }
                     let trail_blit = graphics::Mesh::new_circle(
                         ctx,
                         graphics::DrawMode::fill(),
