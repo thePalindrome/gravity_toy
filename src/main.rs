@@ -34,12 +34,16 @@ struct Game {
     show_help: bool,
     draw_trails: bool,
     running: bool,
-    zoom_level: f32,
+    sliding: bool,
+    mouse_x: f32,
+    mouse_y: f32,
+    matrix: graphics::DrawParam,
 }
 
 impl Game {
     fn new(_ctx: &mut Context) -> Game {
-        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0, show_help: false, draw_trails: false, running: true, zoom_level: 1.0 }
+        Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0, show_help: false, draw_trails: false,
+             running: true, sliding: false, mouse_x: 0.0, mouse_y: 0.0, matrix: graphics::DrawParam::default() }
     }
 }
 
@@ -123,42 +127,69 @@ impl ggez::event::EventHandler for Game {
                     let trail_blit = graphics::Mesh::new_circle(
                         ctx,
                         graphics::DrawMode::fill(),
-                        mint::Point2{x:trail.0 * self.zoom_level, y:trail.1 * self.zoom_level},
-                        10.0 * mass * trail_modifier * self.zoom_level,
+                        mint::Point2{x:trail.0 , y:trail.1},
+                        10.0 * mass * trail_modifier,
                         0.1,
                         color,
                     )?;
-                    graphics::draw(ctx, &trail_blit, graphics::DrawParam::default())?;
+                    graphics::draw(ctx, &trail_blit, self.matrix)?;
                 }
             }
             let circle_blit = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),
-                mint::Point2{x:circle.x * self.zoom_level, y:circle.y * self.zoom_level},
-                10.0 * mass * self.zoom_level,
+                mint::Point2{x:circle.x  , y:circle.y},
+                10.0 * mass ,
                 0.1,
                 color,
             )?;
-            graphics::draw(ctx, &circle_blit, graphics::DrawParam::default())?;
+            graphics::draw(ctx, &circle_blit, self.matrix)?;
         }
         graphics::present(ctx)?;
         timer::yield_now();
         Ok(())
     }
 
+    fn mouse_motion_event(&mut self, _ctx: &mut Context, x: f32, y: f32, dx: f32, dy: f32) {
+        if (self.mouse_x - x).abs() < 0.1 && (self.mouse_y - y).abs() < 0.1 { return } // don't do anything if the mouse seems to have not moved
+        self.mouse_x = x;
+        self.mouse_y = y;
+        if self.sliding {
+            self.matrix.dest.x += dx;
+            self.matrix.dest.y += dy;
+        }
+    }
+
     fn mouse_wheel_event(&mut self, _ctx: &mut Context, _x: f32, y: f32)
     {
-        self.zoom_level += y / 10.0;
+        self.matrix.scale.x += y / 10.0;
+        self.matrix.scale.y += y / 10.0;
+        if y > 0.0 {   
+            self.matrix.dest.x -= self.mouse_x / 10.0;
+            self.matrix.dest.y -= self.mouse_y / 10.0;
+        } else {
+            self.matrix.dest.x += self.mouse_x / 10.0;
+            self.matrix.dest.y += self.mouse_y / 10.0;
+        }
     }
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) {
         if button == ggez::input::mouse::MouseButton::Left {
-            let mut ball = Ball::new(x,y);
+            let mut ball = Ball::new((x - self.matrix.dest.x) / self.matrix.scale.x, (y - self.matrix.dest.y) / self.matrix.scale.y);
             ball.stationary = self.stationary;
             ball.xv = self.xv;
             ball.yv = self.yv;
             ball.mass = self.mass;
             self.circle_vec.push(ball);
+        }
+        if button == ggez::input::mouse::MouseButton::Right {
+            self.sliding = true;
+        }
+    }
+
+    fn mouse_button_up_event(&mut self,_ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
+        if button == ggez::input::mouse::MouseButton::Right {
+            self.sliding = false;
         }
     }
 
