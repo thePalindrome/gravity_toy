@@ -37,13 +37,14 @@ struct Game {
     sliding: bool,
     mouse_x: f32,
     mouse_y: f32,
-    matrix: graphics::DrawParam,
+    dest: mint::Point2<f32>,
+    scale: mint::Vector2<f32>,
 }
 
 impl Game {
     fn new(_ctx: &mut Context) -> Game {
         Game{ circle_vec: Vec::new(), stationary: false, xv: 0.0, yv: 0.0, mass: 10.0, show_help: false, draw_trails: false,
-             running: true, sliding: false, mouse_x: 0.0, mouse_y: 0.0, matrix: graphics::DrawParam::default() }
+             running: true, sliding: false, mouse_x: 0.0, mouse_y: 0.0, dest: mint::Point2{ x: 0.0, y: 0.0}, scale: mint::Vector2{ x: 1.0, y: 1.0}  }
     }
 }
 
@@ -87,7 +88,7 @@ impl ggez::event::EventHandler for Game {
     }
     
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        graphics::clear(ctx, graphics::BLACK);
+        graphics::clear(ctx, graphics::Color::BLACK);
 
         draw_text(ctx, "Press F1 for help".to_string(), 128.0, 0.0);
         if self.show_help {
@@ -116,6 +117,9 @@ impl ggez::event::EventHandler for Game {
 
 
         graphics::draw_queued_text(ctx, graphics::DrawParam::default(), None, graphics::FilterMode::Linear)?;
+
+        let matrix = graphics::DrawParam::new().dest(self.dest).scale(self.scale);
+
         for circle in self.circle_vec.iter() {
             let capacity = circle.trail.capacity() as f32;
             let mass = circle.mass.log10();
@@ -132,7 +136,7 @@ impl ggez::event::EventHandler for Game {
                         0.1,
                         color,
                     )?;
-                    graphics::draw(ctx, &trail_blit, self.matrix)?;
+                    graphics::draw(ctx, &trail_blit, matrix)?;
                 }
             }
             let circle_blit = graphics::Mesh::new_circle(
@@ -143,7 +147,7 @@ impl ggez::event::EventHandler for Game {
                 0.1,
                 color,
             )?;
-            graphics::draw(ctx, &circle_blit, self.matrix)?;
+            graphics::draw(ctx, &circle_blit, matrix)?;
         }
         graphics::present(ctx)?;
         timer::yield_now();
@@ -155,27 +159,27 @@ impl ggez::event::EventHandler for Game {
         self.mouse_x = x;
         self.mouse_y = y;
         if self.sliding {
-            self.matrix.dest.x += dx;
-            self.matrix.dest.y += dy;
+            self.dest.x += dx;
+            self.dest.y += dy;
         }
     }
 
     fn mouse_wheel_event(&mut self, _ctx: &mut Context, _x: f32, y: f32)
     {
-        self.matrix.scale.x += y / 10.0;
-        self.matrix.scale.y += y / 10.0;
+        self.scale.x += (self.scale.x * y) / 100.0;
+        self.scale.y += (self.scale.y * y) / 100.0;
         if y > 0.0 {   
-            self.matrix.dest.x -= self.mouse_x / 10.0;
-            self.matrix.dest.y -= self.mouse_y / 10.0;
+            self.dest.x -= self.mouse_x / 10.0;
+            self.dest.y -= self.mouse_y / 10.0;
         } else {
-            self.matrix.dest.x += self.mouse_x / 10.0;
-            self.matrix.dest.y += self.mouse_y / 10.0;
+            self.dest.x += self.mouse_x / 10.0;
+            self.dest.y += self.mouse_y / 10.0;
         }
     }
 
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) {
         if button == ggez::input::mouse::MouseButton::Left {
-            let mut ball = Ball::new((x - self.matrix.dest.x) / self.matrix.scale.x, (y - self.matrix.dest.y) / self.matrix.scale.y);
+            let mut ball = Ball::new((x - self.dest.x ) / self.scale.x, (y - self.dest.y ) / self.scale.y);
             ball.stationary = self.stationary;
             ball.xv = self.xv;
             ball.yv = self.yv;
@@ -262,9 +266,7 @@ fn load_from_json(str: &String) -> Result<Vec<Ball>, Box<dyn std::error::Error>>
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let c = conf::Conf::new();
     let (mut ctx, mut event_loop) = ContextBuilder::new("hello_ggez", "thePalindrome")
-        .conf(c)
         .build()
         .unwrap();
     
@@ -277,5 +279,5 @@ fn main() {
         }
     }
 
-    event::run(&mut ctx, &mut event_loop, &mut state).unwrap();
+    event::run(ctx, event_loop, state);
 }
