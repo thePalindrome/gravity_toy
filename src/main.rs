@@ -125,19 +125,26 @@ impl ggez::event::EventHandler for Game {
             let mass = circle.mass.log10();
             let color = graphics::Color::new(((circle.xv.abs().hypot(circle.yv.abs())) / 10.0).min(1.0), 0.2, 0.2, 1.0);
             if self.draw_trails {
+                let main_trail = graphics::Mesh::new_circle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    mint::Point2{x:0.0, y:0.0},
+                    10.0 * mass,
+                    0.1,
+                    color,
+                )?;
+                let mut trail_batch = graphics::MeshBatch::new(main_trail)?;
+
                 for (id, trail) in circle.trail.iter().enumerate() {
                     let trail_modifier = 0.9 - ((id + 1) as f32 / capacity) as f32;
-                    if trail_modifier < 0.0 { continue; }
-                    let trail_blit = graphics::Mesh::new_circle(
-                        ctx,
-                        graphics::DrawMode::fill(),
-                        mint::Point2{x:trail.0 , y:trail.1},
-                        10.0 * mass * trail_modifier,
-                        0.1,
-                        color,
-                    )?;
-                    graphics::draw(ctx, &trail_blit, matrix)?;
+                    if trail_modifier < 0.0 { break; } // TODO: check if this line even fires
+
+                    let param = graphics::DrawParam::default().dest(mint::Point2{x: trail.0, y: trail.1}).scale(mint::Vector2{x:trail_modifier, y: trail_modifier});
+                    trail_batch.add(param);
+
                 }
+
+                trail_batch.draw(ctx, matrix);
             }
             let circle_blit = graphics::Mesh::new_circle(
                 ctx,
